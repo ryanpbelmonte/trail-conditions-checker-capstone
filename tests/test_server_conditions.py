@@ -1,7 +1,7 @@
 """
 Week 6 server-side contract tests for Trail Checker.
 
-Owner: Ryan Belmonte — Server-side
+Owner: Ryan Belmonte - Server-side
 
 These tests describe the agreed API behavior before implementation exists.
 They should fail at first, then pass when the server-side routes and

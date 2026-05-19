@@ -1,7 +1,7 @@
 """
 Week 6 DB-and-security contract tests for Trail Checker.
 
-Owner: Nick Stjern — DB-and-security
+Owner: Nick Stjern - DB-and-security
 
 These tests describe the agreed schema and authorization behavior before
 implementation exists. They should fail at first, then pass when the

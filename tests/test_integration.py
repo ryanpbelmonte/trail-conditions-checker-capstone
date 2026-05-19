@@ -1,7 +1,7 @@
 """
 Week 6 integration contract tests for Trail Checker.
 
-Owner: Shared — Cache Kings
+Owner: Shared - Cache Kings
 
 This test describes the full user flow before implementation exists.
 It should fail at first, then pass when the server-side, client-side,

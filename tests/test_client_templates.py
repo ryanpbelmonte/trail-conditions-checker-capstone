@@ -1,7 +1,7 @@
 """
 Week 6 client-side contract tests for Trail Checker.
 
-Owner: Liam Sipp — Client-side
+Owner: Liam Sipp - Client-side
 
 These tests intentionally describe the Trail Checker templates before the
 implementation exists. They should fail at first, then pass when the
