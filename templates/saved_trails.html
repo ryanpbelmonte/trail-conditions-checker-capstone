@@ -44,6 +44,7 @@
                         </a>
 
                         <form method="POST" action="/saved-trails/{{ trail.id }}/delete">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-outline-danger btn-sm">
                                 Delete
                             </button>
