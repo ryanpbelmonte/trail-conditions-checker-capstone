@@ -30,15 +30,16 @@ Run the full e2e folder:
 
 ### User-visible behavior
 
-A logged-out user signs in through the test login backdoor, which stands in for a completed GitHub OAuth callback. The browser should land on `/saved-trails`, and the navbar should show `Logged in as lifecycle_part3`.
+A first-time test user signs in through `/test/login/<username>`, which stands in for the completed GitHub OAuth callback. Ryan's test uses a fresh username shaped like `ryan_part3_<random>`. The browser lands on `/saved-trails`, and the navbar shows `Logged in as <username>`.
 
 ### Regression this catches
 
-This catches a broken first-time OAuth login flow where the app creates a session but fails to create the expected local identity record. It also catches redirect drift, such as accidentally sending the user back to `/` or `/login` instead of `/saved-trails`.
+This catches a broken first-time OAuth-style create/link flow. Before login, the matching `oauth_identity` row count should be `0`. After login through the backdoor, the row count should be exactly `1` for `provider="github"` and `provider_user_id="test-<username>"`. It also catches redirect drift if login stops landing on `/saved-trails`.
 
 ### Known gap
 
-This does not contact real GitHub. The test backdoor stands in for the OAuth provider so CI can run without external credentials or network-dependent provider behavior.
+This does not drive the real GitHub authorize page, token exchange, or `/user` provider response. The test-login backdoor stands in for everything after the OAuth callback establishes the local authenticated user.
+
 
 ## Scenario 2: Returning OAuth-style login reuses the same identity row
 
@@ -48,15 +49,16 @@ This does not contact real GitHub. The test backdoor stands in for the OAuth pro
 
 ### User-visible behavior
 
-The same user logs in, logs out through the UI, then logs in again through the backdoor. The browser should again land on `/saved-trails` and show the same logged-in username in the navbar.
+The same test user logs in through `/test/login/lifecycle_part3`, lands on `/saved-trails`, logs out through the navbar, then logs in again through the same backdoor route. The browser should again land on `/saved-trails` and show `Logged in as lifecycle_part3`.
 
 ### Regression this catches
 
-This catches duplicate identity creation. A returning GitHub user should reuse the existing `oauth_identity` row instead of creating a second row for the same provider and provider user ID.
+This catches duplicate identity creation on returning login. The first login should create exactly one `oauth_identity` row. The second login should reuse that same row, so the count stays `1` instead of increasing or failing on a uniqueness constraint.
 
 ### Known gap
 
-This test focuses on the identity-linking behavior for one deterministic test user. It does not test every possible GitHub account shape, username collision, or provider payload variation.
+This validates the app's post-OAuth local persistence behavior in test mode. It does not validate provider-side behavior on `github.com`, GitHub account switching, or real provider session state.
+
 
 ## Scenario 3: Tokenless POST is rejected by CSRF protection
 
