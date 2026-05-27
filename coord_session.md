@@ -191,7 +191,7 @@ Facilitator: Ryan Belmonte.
 
 ### Context
 
-Week 7 adds GitHub OAuth, Playwright browser-driven E2E tests, and session hardening. Cache Kings is a three-person team without a dedicated coordinator, so Part 1 contract work is shared. Ryan ran a pre-decided, role-blocked checklist in Discord (the "APPROVE YOUR BLOCK" message) instead of a live planning call to fit the 3-day window over a holiday weekend.
+Week 7 adds GitHub OAuth, Playwright browser-driven E2E tests, and session hardening. Cache Kings is a three-person team without a dedicated coordinator, so Part 1 contract work is shared. Ryan shared a role-blocked checklist in Discord for team review/approval instead of a live planning call, to fit the 3-day window over a holiday weekend.
 
 ### Approval status
 
