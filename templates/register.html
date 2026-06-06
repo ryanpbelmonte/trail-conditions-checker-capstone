@@ -6,6 +6,9 @@
         <h1 class="h3 mb-4">Register</h1>
         <form method="POST" action="{{ url_for('register') }}" data-disable-on-submit>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if next_url %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+            {% endif %}
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
                 <input type="text" class="form-control" id="username" name="username" required autofocus>
@@ -16,7 +19,7 @@
                 <div class="form-text">At least 8 characters, including letters and a digit.</div>
             </div>
             <button type="submit" class="btn btn-primary">Create account</button>
-            <a href="{{ url_for('login') }}" class="btn btn-link">Already have an account?</a>
+            <a href="{{ url_for('login', next=next_url) if next_url else url_for('login') }}" class="btn btn-link">Already have an account?</a>
         </form>
     </div>
 </div>

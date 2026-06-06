@@ -7,7 +7,7 @@
 
         <div class="card shadow-sm mb-4">
             <div class="card-body">
-                <a href="/login/github" class="btn btn-dark w-100 mb-3">
+                <a href="{{ url_for('login_github', next=next_url) if next_url else url_for('login_github') }}" class="btn btn-dark w-100 mb-3">
                     Sign in with GitHub
                 </a>
 
@@ -17,6 +17,9 @@
 
                 <form method="POST" action="{{ url_for('login') }}" data-disable-on-submit>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if next_url %}
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    {% endif %}
 
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
@@ -36,7 +39,7 @@
                     </div>
 
                     <button type="submit" class="btn btn-primary">Log in</button>
-                    <a href="{{ url_for('register') }}" class="btn btn-link">Need an account?</a>
+                    <a href="{{ url_for('register', next=next_url) if next_url else url_for('register') }}" class="btn btn-link">Need an account?</a>
                 </form>
             </div>
         </div>
