@@ -9,3 +9,5 @@ venv
 *.db
 .DS_Store
 tests
+certbot
+nginx/certs
