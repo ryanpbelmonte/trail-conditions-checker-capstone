@@ -139,6 +139,43 @@ def test_results_page_persists_trail_check_for_anonymous_search(client):
 
 
 @responses.activate
+def test_login_to_save_shows_conditions_from_anonymous_search(client):
+    """Log-in-to-save adopts the anonymous trail_check so saved-trails has data."""
+    add_openweather_responses()
+    client.post("/register", data={"username": "hiker", "password": "password123"})
+    client.post("/logout")
+
+    response = client.get("/trail-checker/results?q=Mount%20Rainier")
+    assert response.status_code == 200
+
+    client.get(
+        "/login/save-location",
+        query_string={
+            "display_name": "Mount Rainier",
+            "query_text": "Mount Rainier",
+            "latitude": "46.8523",
+            "longitude": "-121.7603",
+            "country": "US",
+            "state": "Washington",
+        },
+    )
+    saved_page = client.post(
+        "/login",
+        data={"username": "hiker", "password": "password123", "next": "/saved-trails"},
+        follow_redirects=True,
+    )
+
+    assert b"Trail saved" in saved_page.data
+    assert b"overcast clouds" in saved_page.data
+    assert b'data-testid="saved-trail-recommendation"' in saved_page.data
+
+    with Session(engine) as db:
+        check = db.exec(select(TrailCheck)).first()
+        assert check is not None
+        assert check.user_id is not None
+
+
+@responses.activate
 def test_results_page_marks_existing_saved_trail(client):
     """Logged-in users see already-saved state for matching coordinates."""
     client.post("/register", data={"username": "hiker", "password": "password123"})
@@ -187,3 +224,137 @@ def test_saved_trail_recheck_uses_coordinates_without_geocoding(client):
     with Session(engine) as db:
         saved = db.exec(select(SavedTrail)).first()
     assert saved is not None
+
+
+@responses.activate
+def test_saved_trail_recheck_json_updates_without_navigation(client):
+    """POST /recheck returns JSON for in-page saved-trails refresh."""
+    client.post("/register", data={"username": "hiker2", "password": "password123"})
+    client.post(
+        "/saved-trails",
+        data={
+            "display_name": "Mount Rainier",
+            "query_text": "Mount Rainier",
+            "latitude": "46.8523",
+            "longitude": "-121.7603",
+            "country": "US",
+            "state": "Washington",
+        },
+    )
+    add_openweather_responses(include_geocode=False)
+
+    response = client.post("/saved-trails/1/recheck")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["recommendation"] in ("good", "caution", "poor", "unknown")
+    assert payload["data"]["weather_main"]
+    assert "checked_at" in payload["data"]
+
+
+def test_saved_trails_sorted_by_recommendation_best_first(client):
+    """Saved-trails list orders Good before Caution before Poor; no check last."""
+    from sqlmodel import Session, select
+
+    from app import SavedTrail, TrailCheck, User
+
+    client.post("/register", data={"username": "sorter", "password": "password123"})
+
+    fixtures = [
+        ("Poor Peak", "poor", 48.0, -120.0),
+        ("Good Ridge", "good", 47.0, -121.0),
+        ("Caution Cove", "caution", 46.0, -122.0),
+        ("No Check Yet", None, 45.0, -123.0),
+    ]
+
+    with Session(engine) as db:
+        user = db.exec(select(User).where(User.username == "sorter")).first()
+        assert user is not None
+        for name, recommendation, lat, lon in fixtures:
+            trail = SavedTrail(
+                user_id=user.id,
+                display_name=name,
+                query_text=name,
+                latitude=lat,
+                longitude=lon,
+            )
+            db.add(trail)
+            db.commit()
+            db.refresh(trail)
+            if recommendation:
+                db.add(
+                    TrailCheck(
+                        user_id=user.id,
+                        query_text=name,
+                        resolved_name=name,
+                        latitude=lat,
+                        longitude=lon,
+                        weather_main="Clear",
+                        weather_description="clear sky",
+                        temp_f=60.0,
+                        recommendation=recommendation,
+                    )
+                )
+        db.commit()
+
+    response = client.get("/saved-trails")
+    assert response.status_code == 200
+    body = response.data.decode()
+    assert body.index("Good Ridge") < body.index("Caution Cove")
+    assert body.index("Caution Cove") < body.index("Poor Peak")
+    assert body.index("Poor Peak") < body.index("No Check Yet")
+
+
+def test_saved_trails_sorted_alphabetically_within_recommendation(client):
+    """Trails with the same recommendation appear in A-Z order by display name."""
+    from sqlmodel import Session, select
+
+    from app import SavedTrail, TrailCheck, User
+
+    client.post("/register", data={"username": "alphasort", "password": "password123"})
+
+    fixtures = [
+        ("Zebra Falls", "good", 47.1, -121.1),
+        ("Alpha Peak", "good", 47.2, -121.2),
+        ("Mesa Point", "good", 47.3, -121.3),
+        ("Yosemite View", "caution", 46.1, -122.1),
+        ("Bear Lake", "caution", 46.2, -122.2),
+    ]
+
+    with Session(engine) as db:
+        user = db.exec(select(User).where(User.username == "alphasort")).first()
+        assert user is not None
+        for name, recommendation, lat, lon in fixtures:
+            trail = SavedTrail(
+                user_id=user.id,
+                display_name=name,
+                query_text=name,
+                latitude=lat,
+                longitude=lon,
+            )
+            db.add(trail)
+            db.commit()
+            db.refresh(trail)
+            db.add(
+                TrailCheck(
+                    user_id=user.id,
+                    query_text=name,
+                    resolved_name=name,
+                    latitude=lat,
+                    longitude=lon,
+                    weather_main="Clear",
+                    weather_description="clear sky",
+                    temp_f=60.0,
+                    recommendation=recommendation,
+                )
+            )
+        db.commit()
+
+    response = client.get("/saved-trails")
+    assert response.status_code == 200
+    body = response.data.decode()
+    assert body.index("Alpha Peak") < body.index("Mesa Point")
+    assert body.index("Mesa Point") < body.index("Zebra Falls")
+    assert body.index("Zebra Falls") < body.index("Bear Lake")
+    assert body.index("Bear Lake") < body.index("Yosemite View")

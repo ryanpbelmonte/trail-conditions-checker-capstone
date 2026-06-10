@@ -6,17 +6,15 @@
         <div>
             <span class="badge text-bg-success mb-2">Live Conditions</span>
             <h1 class="display-6 fw-bold mb-1">Conditions for {{ resolved_name }}</h1>
-            <p class="text-muted mb-0">
-                Search: {{ query_text }} - Coordinates: {{ latitude }}, {{ longitude }}
-            </p>
+            <p class="tc-location-line mb-0">{{ location_line }}</p>
         </div>
 
-        <a href="/trail-checker" class="btn btn-outline-primary">
+        <a href="{{ url_for('home') }}" class="btn btn-outline-primary">
             Search again
         </a>
     </div>
 
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card border-0 shadow-sm mb-4 tc-surface-card">
         <div class="card-body p-4">
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                 <div>
@@ -43,7 +41,7 @@
 
     <div class="row g-4">
         <div class="col-lg-6">
-            <div class="card h-100 shadow-sm" data-testid="weather-card">
+            <div class="card h-100 shadow-sm tc-surface-card" data-testid="weather-card">
                 <div class="card-header bg-white">
                     <h2 class="h5 mb-0">Weather</h2>
                 </div>
@@ -83,7 +81,7 @@
         </div>
 
         <div class="col-lg-6">
-            <div class="card h-100 shadow-sm" data-testid="air-quality-card">
+            <div class="card h-100 shadow-sm tc-surface-card" data-testid="air-quality-card">
                 <div class="card-header bg-white">
                     <h2 class="h5 mb-0">Air quality</h2>
                 </div>
@@ -116,13 +114,8 @@
 
     {% if user %}
         {% if not is_saved %}
-        <div class="card border-0 shadow-sm mt-4">
+        <div class="card border-0 shadow-sm mt-4 tc-surface-card">
             <div class="card-body">
-                <h2 class="h5 fw-bold">Save this location</h2>
-                <p class="text-muted">
-                    Save this location so you can re-check conditions faster later.
-                </p>
-
                 <form method="POST" action="/saved-trails">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="display_name" value="{{ resolved_name }}">
@@ -145,7 +138,7 @@
         {% endif %}
     {% else %}
     <div class="alert alert-light border mt-4 mb-0">
-        <a href="/login">Log in</a> to save this location.
+        <a href="{{ url_for('login_to_save_location', display_name=resolved_name, query_text=query_text, latitude=latitude, longitude=longitude, country=country or '', state=state or '') }}">Log in</a> to save this location.
     </div>
     {% endif %}
 </section>

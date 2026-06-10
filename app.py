@@ -3,18 +3,14 @@ Course 506 Week 6 — Trail Checker (DB-and-security slice implemented)
 
 Flask + Postgres + SQLModel + Flask-Login + Flask-WTF + Flask-Limiter.
 
-The home page serves the static site you sync from your S3 bucket into
-S3_content/. Login, register, logout, and about are Flask-rendered routes.
-Saved trail routes are protected by Flask-Login and enforce ownership at
-the database query level.
+Login, register, and logout are Flask-rendered routes. Saved trail routes
+are protected by Flask-Login and enforce ownership at the database query level.
 """
 
 import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-
 from dotenv import load_dotenv
 
 # Load .env BEFORE any os.environ reads below. load_dotenv() is a no-op
@@ -27,7 +23,7 @@ from authlib.integrations.base_client.errors import MismatchingStateError, OAuth
 from authlib.integrations.flask_client import OAuth
 from flask import (
     Flask, render_template, request, redirect, url_for, session, flash, g,
-    send_from_directory, abort, jsonify,
+    abort, jsonify,
 )
 from flask_login import (
     LoginManager,
@@ -119,9 +115,6 @@ def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
-
-
-S3_CONTENT_DIR = Path(__file__).parent / "S3_content"
 
 
 login_manager = LoginManager()
@@ -376,7 +369,7 @@ def handle_csrf_error(error):
     """
     if not current_user.is_authenticated:
         return redirect(url_for("login"))
-    flash("Your session expired. Please try again.")
+    flash("Your session expired. Please try again.", "warning")
     return redirect(request.referrer or url_for("home"))
 
 
@@ -385,6 +378,128 @@ def validate_text(value: str | None, min_len: int, max_len: int, field_name: str
     if len(cleaned) < min_len or len(cleaned) > max_len:
         raise ValueError(f"Invalid {field_name}")
     return cleaned
+
+
+def _safe_next_url(target: str | None) -> str | None:
+    """Allow only same-site relative paths for post-login redirects."""
+    if not target:
+        return None
+    cleaned = target.strip()
+    if not cleaned.startswith("/") or cleaned.startswith("//"):
+        return None
+    return cleaned
+
+
+def _post_login_redirect_url(*, default: str | None = None) -> str:
+    """Resolve redirect after login/register/OAuth; honors ?next= when safe."""
+    if default is None:
+        default = url_for("saved_trails")
+    next_from_form = _safe_next_url(request.form.get("next"))
+    next_from_args = _safe_next_url(request.args.get("next"))
+    next_from_session = _safe_next_url(session.pop("post_login_next", None))
+    return next_from_form or next_from_args or next_from_session or default
+
+
+def _save_trail_for_user(
+    db: Session,
+    user_id: int,
+    *,
+    display_name: str,
+    query_text: str,
+    latitude: float,
+    longitude: float,
+    country: str | None,
+    state: str | None,
+    notes: str | None = None,
+) -> str:
+    """Persist a saved trail. Returns 'created' or 'duplicate'."""
+    existing = db.exec(
+        select(SavedTrail).where(
+            SavedTrail.user_id == user_id,
+            SavedTrail.latitude == latitude,
+            SavedTrail.longitude == longitude,
+        )
+    ).first()
+
+    if existing is not None:
+        _claim_anonymous_trail_checks(db, user_id, latitude, longitude)
+        return "duplicate"
+
+    trail = SavedTrail(
+        user_id=user_id,
+        display_name=display_name,
+        query_text=query_text,
+        latitude=latitude,
+        longitude=longitude,
+        country=country,
+        state=state,
+        notes=notes,
+    )
+    db.add(trail)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        audit(
+            "saved_trail.create.duplicate",
+            user_id=user_id,
+            latitude=latitude,
+            longitude=longitude,
+        )
+        _claim_anonymous_trail_checks(db, user_id, latitude, longitude)
+        return "duplicate"
+
+    db.refresh(trail)
+    audit(
+        "saved_trail.create",
+        user_id=user_id,
+        trail_id=trail.id,
+    )
+    _claim_anonymous_trail_checks(db, user_id, latitude, longitude)
+    return "created"
+
+
+def _redirect_after_auth(user_id: int, *, default: str | None = None):
+    """Complete login/register/OAuth: auto-save queued trail, then redirect."""
+    queued_save = "pending_saved_trail" in session
+    _consume_pending_saved_trail(user_id)
+    if queued_save:
+        return redirect(url_for("saved_trails"))
+    return redirect(_post_login_redirect_url(default=default))
+
+
+def _consume_pending_saved_trail(user_id: int) -> None:
+    """After login/register/OAuth, save a trail the user queued from results."""
+    pending = session.pop("pending_saved_trail", None)
+    if not pending:
+        return
+
+    try:
+        display_name = validate_text(pending.get("display_name"), 2, 100, "display_name")
+        query_text = validate_text(pending.get("query_text"), 2, 100, "query_text")
+        latitude = validate_float(pending.get("latitude"), -90, 90, "latitude")
+        longitude = validate_float(pending.get("longitude"), -180, 180, "longitude")
+        country = validate_optional_text(pending.get("country"), 10, "country")
+        state = validate_optional_text(pending.get("state"), 100, "state")
+    except ValueError:
+        return
+
+    db = get_db_session()
+    outcome = _save_trail_for_user(
+        db,
+        user_id,
+        display_name=display_name,
+        query_text=query_text,
+        latitude=latitude,
+        longitude=longitude,
+        country=country,
+        state=state,
+    )
+    if outcome == "created":
+        flash("Trail saved.", "success")
+    else:
+        flash("That trail is already saved.", "info")
 
 
 def validate_optional_text(value: str | None, max_len: int, field_name: str) -> str | None:
@@ -554,47 +669,33 @@ def _login_user_after_oauth(user: User) -> None:
 
 @app.route("/")
 def home():
-    return render_template("home.html")
-
-
-@app.route("/site/")
-def site_home():
-    index_path = S3_CONTENT_DIR / "index.html"
-    if not index_path.exists():
-        return render_template("placeholder.html"), 200
-    return send_from_directory(S3_CONTENT_DIR, "index.html")
-
-
-@app.route("/site/<path:filename>")
-def serve_s3_content(filename):
-    file_path = S3_CONTENT_DIR / filename
-    if not file_path.exists() or not file_path.is_file():
-        abort(404)
-    return send_from_directory(S3_CONTENT_DIR, filename)
+    return render_template("trail_checker.html")
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
+    next_url = _safe_next_url(request.args.get("next") or request.form.get("next"))
+
     if request.method == "GET":
-        return render_template("register.html")
+        return render_template("register.html", next_url=next_url)
 
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
 
     if not username or not password:
-        flash("Username and password are required.")
-        return redirect(url_for("register"))
+        flash("Username and password are required.", "danger")
+        return redirect(url_for("register", next=next_url) if next_url else url_for("register"))
 
     try:
         validate_password_policy(password)
     except ValueError as error:
-        flash(str(error))
+        flash(str(error), "danger")
         return redirect(url_for("register"))
 
     db = get_db_session()
     existing = db.exec(select(User).where(User.username == username)).first()
     if existing is not None:
-        flash("That username is already taken.")
+        flash("That username is already taken.", "danger")
         return redirect(url_for("register"))
 
     user = User(
@@ -616,14 +717,16 @@ def register():
         username=username,
         ip=request.remote_addr,
     )
-    return redirect(url_for("home"))
+    return _redirect_after_auth(user.id, default=url_for("home"))
 
 
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute", methods=["POST"])
 def login():
+    next_url = _safe_next_url(request.args.get("next") or request.form.get("next"))
+
     if request.method == "GET":
-        return render_template("login.html")
+        return render_template("login.html", next_url=next_url)
 
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
@@ -638,13 +741,13 @@ def login():
     if user is None or user.password_hash is None:
         check_password_hash(_DUMMY_PASSWORD_HASH, password)
         audit("user.login.failure", username=username, ip=request.remote_addr)
-        flash("Invalid username or password.")
-        return redirect(url_for("login"))
+        flash("Invalid username or password.", "danger")
+        return redirect(url_for("login", next=next_url) if next_url else url_for("login"))
 
     if not check_password_hash(user.password_hash, password):
         audit("user.login.failure", username=username, ip=request.remote_addr)
-        flash("Invalid username or password.")
-        return redirect(url_for("login"))
+        flash("Invalid username or password.", "danger")
+        return redirect(url_for("login", next=next_url) if next_url else url_for("login"))
 
     login_user(user, remember=remember)
     session.permanent = True
@@ -654,7 +757,34 @@ def login():
         remember=remember,
         ip=request.remote_addr,
     )
-    return redirect(url_for("saved_trails"))
+    return _redirect_after_auth(user.id)
+
+
+@app.route("/login/save-location")
+def login_to_save_location():
+    """Stash searched location in session, then send user to login to save it."""
+    try:
+        display_name = validate_text(request.args.get("display_name"), 2, 100, "display_name")
+        query_text = validate_text(request.args.get("query_text"), 2, 100, "query_text")
+        latitude = validate_float(request.args.get("latitude"), -90, 90, "latitude")
+        longitude = validate_float(request.args.get("longitude"), -180, 180, "longitude")
+        country = validate_optional_text(request.args.get("country"), 10, "country")
+        state = validate_optional_text(request.args.get("state"), 100, "state")
+    except ValueError:
+        flash("Could not save that location. Search again and try once more.", "warning")
+        return redirect(url_for("home"))
+
+    session.permanent = True
+    session["pending_saved_trail"] = {
+        "display_name": display_name,
+        "query_text": query_text,
+        "latitude": latitude,
+        "longitude": longitude,
+        "country": country,
+        "state": state,
+    }
+    session.modified = True
+    return redirect(url_for("login", next="/saved-trails"))
 
 
 @app.route("/logout", methods=["POST"])
@@ -669,8 +799,11 @@ def logout():
 @app.route("/login/github")
 def login_github():
     if not _oauth_github_configured():
-        flash("GitHub sign-in is not configured.")
+        flash("GitHub sign-in is not configured.", "danger")
         return redirect(url_for("login"))
+    next_url = _safe_next_url(request.args.get("next"))
+    if next_url:
+        session["post_login_next"] = next_url
     redirect_uri = url_for("auth_github_callback", _external=True)
     return oauth.github.authorize_redirect(redirect_uri)
 
@@ -679,28 +812,28 @@ def login_github():
 @limiter.limit("10 per minute")
 def auth_github_callback():
     if not _oauth_github_configured():
-        flash("GitHub sign-in is not configured.")
+        flash("GitHub sign-in is not configured.", "danger")
         return redirect(url_for("login"))
 
     try:
         token = oauth.github.authorize_access_token()
     except MismatchingStateError:
-        flash("Sign-in could not be completed. Please try again.")
+        flash("Sign-in could not be completed. Please try again.", "danger")
         return redirect(url_for("login"))
     except OAuthError:
-        flash("Sign-in could not be completed. Please try again.")
+        flash("Sign-in could not be completed. Please try again.", "danger")
         return redirect(url_for("login"))
 
     resp = oauth.github.get("user", token=token)
     if resp.status_code != 200:
-        flash("Sign-in could not be completed. Please try again.")
+        flash("Sign-in could not be completed. Please try again.", "danger")
         return redirect(url_for("login"))
 
     github_user = resp.json()
     db = get_db_session()
     user = find_or_create_user_from_github(db, github_user)
     if user is None:
-        flash("Sign-in could not be completed. Please try again.")
+        flash("Sign-in could not be completed. Please try again.", "danger")
         return redirect(url_for("login"))
 
     _login_user_after_oauth(user)
@@ -710,7 +843,7 @@ def auth_github_callback():
         provider="github",
         ip=request.remote_addr,
     )
-    return redirect(url_for("saved_trails"))
+    return _redirect_after_auth(user.id)
 
 
 @app.route("/test/login/<username>")
@@ -727,11 +860,6 @@ def test_login(username: str):
 
     _login_user_after_oauth(user)
     return redirect(url_for("saved_trails"))
-
-
-@app.route("/about")
-def about():
-    return render_template("about.html")
 
 
 # ---------------------------------------------------------------------------
@@ -770,6 +898,12 @@ def _results_context_from_data(data: dict, is_saved: bool = False) -> dict:
         "recommendation": data.get("recommendation", "unknown"),
         "country": data.get("country"),
         "state": data.get("state"),
+        "location_line": _format_location_line(
+            state=data.get("state"),
+            country=data.get("country"),
+            latitude=data["latitude"],
+            longitude=data["longitude"],
+        ),
         "is_saved": is_saved,
     }
 
@@ -778,6 +912,83 @@ def _current_user_id_or_none() -> int | None:
     if current_user.is_authenticated:
         return current_user.id
     return None
+
+
+RECOMMENDATION_SORT_RANK = {
+    "good": 4,
+    "caution": 3,
+    "poor": 2,
+    "unknown": 1,
+}
+
+
+def _saved_trail_sort_key(entry: dict) -> tuple:
+    """Sort saved-trails list: best recommendation first, then name A-Z."""
+    latest = entry["latest"]
+    rank = RECOMMENDATION_SORT_RANK.get(latest.recommendation, 0) if latest else 0
+    name_key = entry["trail"].display_name.casefold()
+    return (-rank, name_key)
+
+
+def _format_location_line(
+    *,
+    state: str | None,
+    country: str | None,
+    latitude: float,
+    longitude: float,
+) -> str:
+    """Human-readable place line from geocoding fields or coordinates."""
+    parts = []
+    if state:
+        parts.append(state)
+    if country:
+        parts.append(country)
+    if parts:
+        return ", ".join(parts)
+    return f"{latitude:.2f}, {longitude:.2f}"
+
+
+def _format_saved_location(trail: SavedTrail) -> str:
+    return _format_location_line(
+        state=trail.state,
+        country=trail.country,
+        latitude=trail.latitude,
+        longitude=trail.longitude,
+    )
+
+
+def _claim_anonymous_trail_checks(
+    db: Session, user_id: int, latitude: float, longitude: float
+) -> None:
+    """Attach anonymous search snapshots to the user who saved this location."""
+    anonymous = db.exec(
+        select(TrailCheck).where(
+            TrailCheck.user_id == None,  # noqa: E711 — SQL NULL match
+            TrailCheck.latitude == latitude,
+            TrailCheck.longitude == longitude,
+        )
+    ).all()
+    if not anonymous:
+        return
+    for row in anonymous:
+        row.user_id = user_id
+    db.commit()
+
+
+def _latest_trail_check_for_saved(
+    db: Session, user_id: int, trail: SavedTrail
+) -> TrailCheck | None:
+    """Most recent conditions snapshot for this saved coordinates (same user)."""
+    return db.exec(
+        select(TrailCheck)
+        .where(
+            TrailCheck.user_id == user_id,
+            TrailCheck.latitude == trail.latitude,
+            TrailCheck.longitude == trail.longitude,
+        )
+        .order_by(TrailCheck.checked_at.desc())
+        .limit(1)
+    ).first()
 
 
 def _is_saved_trail(
@@ -824,14 +1035,53 @@ def _create_trail_check(db: Session, data: dict, user_id: int | None) -> TrailCh
     return trail_check
 
 
-def _render_trail_checker_error(message: str, query_text: str = ""):
-    flash(message)
+def _serialize_saved_trail_check(trail: SavedTrail, trail_check: TrailCheck) -> dict:
+    """JSON-friendly snapshot for in-page saved-trails recheck."""
+    return {
+        "recommendation": trail_check.recommendation,
+        "weather_main": trail_check.weather_main,
+        "weather_description": trail_check.weather_description,
+        "temp_f": trail_check.temp_f,
+        "wind_mph": trail_check.wind_mph,
+        "aqi": trail_check.aqi,
+        "pm2_5": trail_check.pm2_5,
+        "checked_at": trail_check.checked_at.strftime("%b %d, %Y at %I:%M %p") + " UTC",
+        "saved_at": trail.created_at.strftime("%b %d, %Y"),
+    }
+
+
+def _recheck_saved_trail(
+    db: Session, trail: SavedTrail, user_id: int
+) -> TrailCheck:
+    """Fetch live conditions for a saved trail and persist a trail_checks row."""
+    data = get_conditions_for_coordinates(
+        trail.query_text,
+        trail.display_name,
+        trail.latitude,
+        trail.longitude,
+        country=trail.country,
+        state=trail.state,
+    )
+    return _create_trail_check(db, data, user_id)
+
+
+def _get_owned_saved_trail(db: Session, trail_id: int, user_id: int) -> SavedTrail | None:
+    return db.exec(
+        select(SavedTrail).where(
+            SavedTrail.id == trail_id,
+            SavedTrail.user_id == user_id,
+        )
+    ).first()
+
+
+def _render_trail_checker_error(message: str, query_text: str = "", category: str = "warning"):
+    flash(message, category)
     return render_template("trail_checker.html", query_text=query_text)
 
 
 @app.route("/trail-checker")
 def trail_checker():
-    return render_template("trail_checker.html")
+    return redirect(url_for("home"))
 
 
 @app.route("/trail-checker/results")
@@ -854,11 +1104,13 @@ def trail_checker_results():
         return _render_trail_checker_error(
             "Weather data was malformed. Try again later.",
             query_text,
+            category="danger",
         )
     except ExternalAPIUnavailableError:
         return _render_trail_checker_error(
             "External weather service is unavailable. Try again later.",
             query_text,
+            category="danger",
         )
 
     db = get_db_session()
@@ -905,10 +1157,20 @@ def saved_trails():
         .order_by(SavedTrail.created_at.desc())
     ).all()
 
+    trail_entries = [
+        {
+            "trail": trail,
+            "latest": _latest_trail_check_for_saved(db, current_user.id, trail),
+            "location_line": _format_saved_location(trail),
+        }
+        for trail in trails
+    ]
+    trail_entries.sort(key=_saved_trail_sort_key)
+
     prior_input = session.pop("saved_trail_form", None)
     return render_template(
         "saved_trails.html",
-        saved_trails=trails,
+        trail_entries=trail_entries,
         prior_input=prior_input,
     )
 
@@ -929,7 +1191,7 @@ def create_saved_trail():
         state = validate_optional_text(form.get("state"), 100, "state")
         notes = validate_optional_text(form.get("notes"), 500, "notes")
     except ValueError as error:
-        flash(str(error))
+        flash(str(error), "danger")
         session["saved_trail_form"] = {
             "display_name": form.get("display_name", ""),
             "query_text": form.get("query_text", ""),
@@ -942,20 +1204,9 @@ def create_saved_trail():
         return redirect(url_for("saved_trails"))
 
     db = get_db_session()
-    existing = db.exec(
-        select(SavedTrail).where(
-            SavedTrail.user_id == current_user.id,
-            SavedTrail.latitude == latitude,
-            SavedTrail.longitude == longitude,
-        )
-    ).first()
-
-    if existing is not None:
-        flash("That trail is already saved.")
-        return redirect(url_for("saved_trails"))
-
-    trail = SavedTrail(
-        user_id=current_user.id,
+    outcome = _save_trail_for_user(
+        db,
+        current_user.id,
         display_name=display_name,
         query_text=query_text,
         latitude=latitude,
@@ -964,28 +1215,10 @@ def create_saved_trail():
         state=state,
         notes=notes,
     )
-    db.add(trail)
-
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        audit(
-            "saved_trail.create.duplicate",
-            user_id=current_user.id,
-            latitude=latitude,
-            longitude=longitude,
-        )
-        flash("That trail is already saved.")
-        return redirect(url_for("saved_trails"))
-
-    db.refresh(trail)
-    audit(
-        "saved_trail.create",
-        user_id=current_user.id,
-        trail_id=trail.id,
-    )
-    flash("Trail saved.")
+    if outcome == "created":
+        flash("Trail saved.", "success")
+    else:
+        flash("That trail is already saved.", "info")
     return redirect(url_for("saved_trails"))
 
 
@@ -1019,20 +1252,59 @@ def delete_saved_trail(trail_id: int):
         user_id=current_user.id,
         trail_id=trail_id,
     )
-    flash("Saved trail deleted.")
+    flash("Saved trail deleted.", "success")
     return redirect(url_for("saved_trails"))
+
+
+@app.route("/saved-trails/<int:trail_id>/recheck", methods=["POST"])
+@login_required
+def recheck_saved_trail(trail_id: int):
+    """In-page recheck: returns JSON so saved-trails cards update without navigation."""
+    db = get_db_session()
+    trail = _get_owned_saved_trail(db, trail_id, current_user.id)
+
+    if trail is None:
+        audit(
+            "saved_trail.check.denied",
+            actor_id=current_user.id,
+            target_trail_id=trail_id,
+        )
+        return _json_error("not_found", "Saved trail not found.", 404)
+
+    try:
+        trail_check = _recheck_saved_trail(db, trail, current_user.id)
+    except ExternalAPIError:
+        return _json_error(
+            "external_api_error",
+            "Weather data was malformed. Try again later.",
+            502,
+        )
+    except ExternalAPIUnavailableError:
+        return _json_error(
+            "external_api_unavailable",
+            "External weather service is unavailable. Try again later.",
+            503,
+        )
+
+    audit(
+        "saved_trail.recheck",
+        user_id=current_user.id,
+        trail_id=trail_id,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "data": _serialize_saved_trail_check(trail, trail_check),
+        }
+    )
 
 
 @app.route("/saved-trails/<int:trail_id>/check", methods=["GET"])
 @login_required
 def check_saved_trail(trail_id: int):
+    """Full results page (e.g. bookmark); saved-trails UI uses POST /recheck instead."""
     db = get_db_session()
-    trail = db.exec(
-        select(SavedTrail).where(
-            SavedTrail.id == trail_id,
-            SavedTrail.user_id == current_user.id,
-        )
-    ).first()
+    trail = _get_owned_saved_trail(db, trail_id, current_user.id)
 
     db.get(User, current_user.id)
 
@@ -1045,20 +1317,37 @@ def check_saved_trail(trail_id: int):
         abort(404)
 
     try:
-        data = get_conditions_for_coordinates(
-            trail.query_text,
-            trail.display_name,
-            trail.latitude,
-            trail.longitude,
-            country=trail.country,
-            state=trail.state,
-        )
+        trail_check = _recheck_saved_trail(db, trail, current_user.id)
     except ExternalAPIError:
-        flash("Weather data was malformed. Try again later.")
+        flash("Weather data was malformed. Try again later.", "danger")
         return redirect(url_for("saved_trails"))
     except ExternalAPIUnavailableError:
-        flash("External weather service is unavailable. Try again later.")
+        flash("External weather service is unavailable. Try again later.", "danger")
         return redirect(url_for("saved_trails"))
+
+    data = {
+        "query_text": trail.query_text,
+        "resolved_name": trail.display_name,
+        "latitude": trail.latitude,
+        "longitude": trail.longitude,
+        "weather": {
+            "main": trail_check.weather_main,
+            "description": trail_check.weather_description,
+            "temp_f": trail_check.temp_f,
+            "feels_like_f": trail_check.feels_like_f,
+            "humidity": trail_check.humidity,
+            "wind_mph": trail_check.wind_mph,
+            "visibility_meters": trail_check.visibility_meters,
+        },
+        "air_quality": {
+            "aqi": trail_check.aqi,
+            "pm2_5": trail_check.pm2_5,
+            "pm10": trail_check.pm10,
+        },
+        "recommendation": trail_check.recommendation,
+        "country": trail.country,
+        "state": trail.state,
+    }
 
     return render_template(
         "trail_results.html",
