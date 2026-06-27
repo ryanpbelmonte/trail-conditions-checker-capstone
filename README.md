@@ -11,7 +11,7 @@
  **Search & results** - location lookup with weather, air quality, and recommendation.
 
  ![Homepage](docs/screenshots/home.png)
- ![Current conditions - Renton, WA](docs/screenshots/current_conditions_Renton.png)
+ ![Current conditions - Renton, WA](docs/screenshots/no-login_current_conditions_Renton.png)
 
  **Saved trails** - logged-in users can save locations and re-check conditions.
 
