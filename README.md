@@ -1,14 +1,60 @@
 # Trail Conditions Checker
 
+> **Portfolio highlight** — UW Tacoma GCSDE team capstone (TCSS 506). Full-stack Flask app with OpenWeather integration, GitHub OAuth, Docker Compose production stack (nginx → gunicorn → Flask → Postgres), deployed on AWS EC2. **My role: server-side owner** — API layer, Flask routes, OAuth, external API integration, E2E test infrastructure. 52 automated tests passing at final merge.
+
+ *Live demo available on request.*
+
+## My contributions
+
+**Server-side owner** — Flask routes, external APIs, OAuth, production runtime, and E2E/CI test infrastructure.
+
+### External APIs & routes
+
+- Built `weather_service.py`: OpenWeather geocoding, current weather, air pollution, recommendation logic, and coordinate-based re-check for saved trails
+- Implemented `GET /api/conditions` with JSON envelope and HTML results/saved-trail routes; mapped upstream failures to structured HTTP errors
+- Designed partial-failure behavior so air-quality fetch can return `None` without failing the whole request
+
+### Authentication
+
+- Implemented GitHub OAuth routes with Authlib (Authorization Code flow, transactional create/link)
+- Added `GET /test/login/<username>` test backdoor and startup environment guards
+
+### Production runtime
+
+- Replaced `flask run` with **gunicorn** (`gunicorn.conf.py`, `Dockerfile` CMD)
+- Added **ProxyFix** so Flask sees HTTPS behind nginx for secure cookies and OAuth redirects
+- Contributed to Docker Compose production stack: nginx → gunicorn → Flask → Postgres
+
+### Testing & CI
+
+- Expanded pytest coverage for server conditions (`tests/test_server_conditions.py`) and integration paths
+- Built shared Playwright E2E infrastructure (`tests/e2e/conftest.py` live_server fixture)
+- Wired OAuth and lifecycle browser tests into GitHub Actions CI (`.github/workflows/test.yml`)
+- Final merge: **52 passing** unit/integration tests
+
+### Capstone integration (Week 10)
+
+- Reviewed integration PR #34: home route consolidation, login-to-save flow, JSON recheck endpoint, safe redirects
+- Deployed integrated app to EC2 and verified search, auth, and saved-trail workflows
+
+
+
+![Trail Condition Checker](docs/screenshots/home.png)
+![Current Conditions: Renton, WA](docs/current_conditions_Renton.png)
+![Saved Trails](docs/saved_locations.png)
+![Register](docs/register_page.png)
+
+<br>
+
 ## Team name, members, and roles
 
 Team: Cache Kings
 
 Members:
 
-* Ryan Belmonte — Server-side
-* Liam Sipp — Client-side
-* Nick Stjern — DB-and-security
+- Ryan Belmonte — Server-side
+- Liam Sipp — Client-side
+- Nick Stjern — DB-and-security
 
 Since our team has three members, we shared coordinator responsibilities across the group. Ryan focused on Flask routes, external API integration, server-side logic, OAuth/server behavior, and backend flow. Liam focused on JavaScript, CSS, browser interactivity, templates, visual presentation, user-flow testing, and demo-path verification. Nick focused on schema design, persistence, input validation, security hardening, nginx behavior, and production-stack/deployment concerns.
 
@@ -28,24 +74,26 @@ The final delivered version lets users search for an outdoor location, view curr
 
 Core delivered features:
 
-* Search for a trailhead, city, park, mountain, or outdoor location
-* Fetch current weather for the searched location
-* Fetch current air quality information
-* Display weather, air quality, location details, and a recommendation in one unified results view
-* Allow users to register and log in with a regular username/password flow
-* Support GitHub OAuth login when production OAuth credentials are configured
-* Allow logged-in users to save locations
-* View saved trails/locations
-* Re-check current conditions for saved locations
-* Delete saved locations
-* Persist users, OAuth identities, saved trails, and trail condition checks in Postgres
-* Run through the Week 8 production stack: nginx, gunicorn, Flask, Postgres, and Docker Compose
+- Search for a trailhead, city, park, mountain, or outdoor location
+- Fetch current weather for the searched location
+- Fetch current air quality information
+- Display weather, air quality, location details, and a recommendation in one unified results view
+- Allow users to register and log in with a regular username/password flow
+- Support GitHub OAuth login when production OAuth credentials are configured
+- Allow logged-in users to save locations
+- View saved trails/locations
+- Re-check current conditions for saved locations
+- Delete saved locations
+- Persist users, OAuth identities, saved trails, and trail condition checks in Postgres
+- Run through the Week 8 production stack: nginx, gunicorn, Flask, Postgres, and Docker Compose
+
+
 
 ## Live deployment
 
 Final deployed application:
 
-https://34.219.236.117/
+[https://34.219.236.117/](https://34.219.236.117/)
 
 The final deployed app is served from an EC2 instance and is reachable over HTTPS using the Week 8 production stack.
 
@@ -55,20 +103,22 @@ The production request path is:
 
 Browser → nginx → gunicorn → Flask → Postgres
 
-* nginx terminates HTTPS, serves static assets, applies security headers, rate-limits selected auth routes, and proxies application requests to gunicorn.
-* gunicorn runs the Flask app as the production WSGI server.
-* Flask handles routes, authentication, search/results, saved trails, and external API integration.
-* Postgres stores users, OAuth identities, saved trails, and trail check data.
-* OpenWeather provides geocoding, current weather, and air pollution/air quality data.
-* Secrets such as `SECRET_KEY`, `OPENWEATHER_API_KEY`, and GitHub OAuth credentials are loaded from environment variables and are not committed to the repository.
+- nginx terminates HTTPS, serves static assets, applies security headers, rate-limits selected auth routes, and proxies application requests to gunicorn.
+- gunicorn runs the Flask app as the production WSGI server.
+- Flask handles routes, authentication, search/results, saved trails, and external API integration.
+- Postgres stores users, OAuth identities, saved trails, and trail check data.
+- OpenWeather provides geocoding, current weather, and air pollution/air quality data.
+- Secrets such as `SECRET_KEY`, `OPENWEATHER_API_KEY`, and GitHub OAuth credentials are loaded from environment variables and are not committed to the repository.
+
+
 
 ## External APIs
 
 The delivered version uses OpenWeather for:
 
-* Geocoding a searched location into coordinates
-* Current weather data
-* Air pollution / air quality data
+- Geocoding a searched location into coordinates
+- Current weather data
+- Air pollution / air quality data
 
 The app requires an `OPENWEATHER_API_KEY` environment variable. The key is not committed to the repository.
 
@@ -88,17 +138,18 @@ This project also gives us practice with real production concerns: API keys, rat
 
 Team project docs:
 
-- [`docs/Week10_Server_Side_Final_Notes.md`](docs/Week10_Server_Side_Final_Notes.md) — Ryan (server-side): ownership, capstone integration review, architecture boundaries, and known limitations
-- [`CONTRACTS.md`](CONTRACTS.md) — route and API contracts
-- [`role_work.md`](role_work.md) — Week 7 per-role contributions
-- [`e2e/server.md`](e2e/server.md) — server-side end-to-end verification walkthrough
+- `[docs/Week10_Server_Side_Final_Notes.md](docs/Week10_Server_Side_Final_Notes.md)` — Ryan (server-side): ownership, capstone integration review, architecture boundaries, and known limitations
+- `[CONTRACTS.md](CONTRACTS.md)` — route and API contracts
+- `[role_work.md](role_work.md)` — Week 7 per-role contributions
+- `[e2e/server.md](e2e/server.md)` — server-side end-to-end verification walkthrough
+
+
 
 ## Running the production stack locally
 
 nginx terminates TLS and proxies to gunicorn on the internal Docker network. Postgres is not published to the host, which keeps the database behind the Docker network boundary.
 
 1. Copy `.env.example` to `.env`.
-
 2. Set required secrets and configuration values:
 
 ```env
@@ -109,7 +160,7 @@ OAUTH_CLIENT_ID=replace-with-real-github-client-id
 OAUTH_CLIENT_SECRET=replace-with-real-github-client-secret
 ```
 
-3. For local GitHub OAuth testing, register the local callback URL:
+1. For local GitHub OAuth testing, register the local callback URL:
 
 ```text
 https://localhost/auth/github/callback
@@ -117,7 +168,7 @@ https://localhost/auth/github/callback
 
 For deployed GitHub OAuth testing, the callback URL must match the deployed public URL.
 
-4. Generate a self-signed cert for local HTTPS:
+1. Generate a self-signed cert for local HTTPS:
 
 ```bash
 mkdir -p nginx/certs
@@ -126,13 +177,13 @@ openssl req -x509 -newkey rsa:2048 -nodes \
   -days 365 -subj "/CN=localhost"
 ```
 
-5. Start the stack:
+1. Start the stack:
 
 ```bash
 docker compose up --build -d
 ```
 
-6. Open:
+1. Open:
 
 ```text
 https://localhost
@@ -142,6 +193,7 @@ Accept the browser warning for the self-signed local certificate.
 
 ## Required environment variables
 
+
 | Variable              | Required                      | Notes                                                                         |
 | --------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
 | `SECRET_KEY`          | Yes                           | The app refuses to boot outside debug/testing if this is left at the default. |
@@ -150,6 +202,9 @@ Accept the browser warning for the self-signed local certificate.
 | `OAUTH_CLIENT_ID`     | Yes for GitHub OAuth          | Must match a real GitHub OAuth app.                                           |
 | `OAUTH_CLIENT_SECRET` | Yes for GitHub OAuth          | Must match a real GitHub OAuth app.                                           |
 | `TESTING`             | Tests only                    | Used by test configuration.                                                   |
+
+
+
 
 ## Running tests
 
@@ -174,6 +229,8 @@ Verified local result after final merge:
 ```text
 52 passed, 1 warning
 ```
+
+
 
 ## Attack-path test
 
@@ -202,30 +259,33 @@ Skipping `-v` will keep the previous schema and may prevent new constraints from
 
 Local final `main` verification:
 
-* `main` pulled cleanly
-* Docker image rebuilt from `main`
-* nginx/app/db containers healthy
-* `/` returns 200
-* `/trail-checker` redirects to `/`
-* `/login` returns 200
-* `/register` returns 200
+- `main` pulled cleanly
+- Docker image rebuilt from `main`
+- nginx/app/db containers healthy
+- `/` returns 200
+- `/trail-checker` redirects to `/`
+- `/login` returns 200
+- `/register` returns 200
 
 Live EC2 verification:
 
-* Public homepage loads
-* Search works
-* Results load
-* Register/login works
-* Save location works
-* Saved Trails page works
-* Re-check conditions works
-* Delete saved trail works
-* Logout works
+- Public homepage loads
+- Search works
+- Results load
+- Register/login works
+- Save location works
+- Saved Trails page works
+- Re-check conditions works
+- Delete saved trail works
+- Logout works
+
+
 
 ## Known limitations
 
-* Local GitHub OAuth requires a real GitHub OAuth app and matching callback URL. Placeholder OAuth credentials will not work.
-* A newly created OpenWeather API key may return 401 until it activates.
-* The local HTTPS certificate is self-signed, so browsers show a warning on `https://localhost`.
-* The production Docker image intentionally excludes tests; tests should be run from the repository or mounted into the test container.
-* Trail Checker provides current condition guidance, not professional safety advice. Users should still check official trail, road, wildfire, and weather sources before outdoor travel.
+- Local GitHub OAuth requires a real GitHub OAuth app and matching callback URL. Placeholder OAuth credentials will not work.
+- A newly created OpenWeather API key may return 401 until it activates.
+- The local HTTPS certificate is self-signed, so browsers show a warning on `https://localhost`.
+- The production Docker image intentionally excludes tests; tests should be run from the repository or mounted into the test container.
+- Trail Checker provides current condition guidance, not professional safety advice. Users should still check official trail, road, wildfire, and weather sources before outdoor travel.
+
