@@ -6,6 +6,10 @@
 
  *Live demo available on request.*
 
+ ![Trail Conditions Checker homepage](docs/screenshots/home.png)
+  
+ ![Current conditions - Renton](docs/screenshots/current_conditions_Renton.png)
+
 ## My contributions
 
 **Server-side owner** — Flask routes, external APIs, OAuth, production runtime, and E2E/CI test infrastructure.
