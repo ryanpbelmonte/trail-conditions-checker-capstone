@@ -53,14 +53,6 @@
 
 
 
-Trail Condition Checker
-Current Conditions: Renton, WA
-Saved Trails
-Register
-
-
-![Tests]([https://github.com/ryanpbelmonte/trail-conditions-checker-capstone/actions/workflows/test.yml/badge.svg](https://github.com/ryanpbelmonte/trail-conditions-checker-capstone/actions/workflows/test.yml/badge.svg))  
-
 
 ## Team name, members, and roles
 
