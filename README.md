@@ -6,9 +6,18 @@
 
  *Live demo available on request.*
 
- ![Trail Conditions Checker homepage](docs/screenshots/home.png)
-  
- ![Current conditions - Renton](docs/screenshots/current_conditions_Renton.png)
+ ## Screenshots
+ 
+ **Search & results** - location lookup with weather, air quality, and recommendation.
+
+ ![Homepage](docs/screenshots/home.png)
+ ![Current conditions - Renton, WA](docs/screenshots/current_conditions_Renton.png)
+
+ **Saved trails** - logged-in users can save locations and re-check conditions.
+
+ ![Saved trails](docs/screenshots/saved_locations.png)
+
+
 
 ## My contributions
 
