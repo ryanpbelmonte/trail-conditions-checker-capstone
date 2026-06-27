@@ -1,5 +1,7 @@
 # Trail Conditions Checker
 
+![Tests](https://github.com/ryanpbelmonte/trail-conditions-checker-capstone/actions/workflows/test.yml/badge.svg)
+
 > **Portfolio highlight** — UW Tacoma GCSDE team capstone (TCSS 506). Full-stack Flask app with OpenWeather integration, GitHub OAuth, Docker Compose production stack (nginx → gunicorn → Flask → Postgres), deployed on AWS EC2. **My role: server-side owner** — API layer, Flask routes, OAuth, external API integration, E2E test infrastructure. 52 automated tests passing at final merge.
 
  *Live demo available on request.*
@@ -14,16 +16,22 @@
 - Implemented `GET /api/conditions` with JSON envelope and HTML results/saved-trail routes; mapped upstream failures to structured HTTP errors
 - Designed partial-failure behavior so air-quality fetch can return `None` without failing the whole request
 
+
+
 ### Authentication
 
 - Implemented GitHub OAuth routes with Authlib (Authorization Code flow, transactional create/link)
 - Added `GET /test/login/<username>` test backdoor and startup environment guards
+
+
 
 ### Production runtime
 
 - Replaced `flask run` with **gunicorn** (`gunicorn.conf.py`, `Dockerfile` CMD)
 - Added **ProxyFix** so Flask sees HTTPS behind nginx for secure cookies and OAuth redirects
 - Contributed to Docker Compose production stack: nginx → gunicorn → Flask → Postgres
+
+
 
 ### Testing & CI
 
@@ -32,6 +40,8 @@
 - Wired OAuth and lifecycle browser tests into GitHub Actions CI (`.github/workflows/test.yml`)
 - Final merge: **52 passing** unit/integration tests
 
+
+
 ### Capstone integration (Week 10)
 
 - Reviewed integration PR #34: home route consolidation, login-to-save flow, JSON recheck endpoint, safe redirects
@@ -39,12 +49,14 @@
 
 
 
-![Trail Condition Checker](docs/screenshots/home.png)
-![Current Conditions: Renton, WA](docs/current_conditions_Renton.png)
-![Saved Trails](docs/saved_locations.png)
-![Register](docs/register_page.png)
+Trail Condition Checker
+Current Conditions: Renton, WA
+Saved Trails
+Register
 
-<br>
+
+![Tests]([https://github.com/ryanpbelmonte/trail-conditions-checker-capstone/actions/workflows/test.yml/badge.svg](https://github.com/ryanpbelmonte/trail-conditions-checker-capstone/actions/workflows/test.yml/badge.svg))  
+
 
 ## Team name, members, and roles
 
