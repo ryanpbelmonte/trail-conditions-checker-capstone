@@ -108,11 +108,10 @@ Core delivered features:
 
 ## Live deployment
 
-Final deployed application:
+Deployed to **AWS EC2** using the Week 8 production stack (Docker Compose: nginx → gunicorn → Flask → Postgres).
 
-[https://34.219.236.117/](https://34.219.236.117/)
+*Live demo available on request* — the public endpoint uses a self-signed certificate on a raw IP, which triggers browser security warnings. Screenshots and local run instructions are in this README.
 
-The final deployed app is served from an EC2 instance and is reachable over HTTPS using the Week 8 production stack.
 
 ## Architecture
 
