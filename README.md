@@ -4,7 +4,7 @@
 
 > **Portfolio highlight** — UW Tacoma GCSDE team capstone (TCSS 506). Full-stack Flask app with OpenWeather integration, GitHub OAuth, Docker Compose production stack (nginx → gunicorn → Flask → Postgres), deployed on AWS EC2. **My role: server-side owner** — API layer, Flask routes, OAuth, external API integration, E2E test infrastructure. 52 automated tests passing at final merge.
 
- *Live demo available on request.*
+ *Demo available on request.*
 
  ## Screenshots
  
@@ -106,12 +106,9 @@ Core delivered features:
 
 
 
-## Live deployment
+## Deployment
 
-Deployed to **AWS EC2** using the Week 8 production stack (Docker Compose: nginx → gunicorn → Flask → Postgres).
-
-*Live demo available on request* — the public endpoint uses a self-signed certificate on a raw IP, which triggers browser security warnings. Screenshots and local run instructions are in this README.
-
+Deployed to **AWS EC2** during the course using the Week 8 production stack (Docker Compose: nginx → gunicorn → Flask → Postgres); the public endpoint is currently offline. Screenshots and local run instructions are in this README. Demo available on request.
 
 ## Architecture
 
