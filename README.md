@@ -34,7 +34,7 @@
 ### Authentication
 
 - Implemented GitHub OAuth routes with Authlib (Authorization Code flow, transactional create/link)
-- Added `GET /test/login/<username>` test backdoor and startup environment guards
+- Added a test-only GET /test/login/<username> route for end-to-end tests. It returns 404 unless TESTING=1 is set and the request comes from localhost (or the app is in debug mode). Added startup guards so the app refuses to boot with the default SECRET_KEY or without GitHub OAuth configured
 
 
 
